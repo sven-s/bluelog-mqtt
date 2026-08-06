@@ -5,6 +5,15 @@ packaged as a Home Assistant add-on. It reads the logger's Modbus TCP registers
 and publishes them with Home Assistant discovery, so inverters, sensors and
 plant totals show up as device cards without any manual entity configuration.
 
+## Requirements
+
+**The blue'Log needs the SCADA interface license.** Modbus TCP is a licensed
+option on these loggers, not a stock feature, and without it the logger will not
+answer on port 502 no matter how the add-on is configured. Check under
+**ANLAGE > SCADA Interface** in the logger's web interface: if the license is
+missing the section cannot be enabled, and you need to buy the license from
+meteocontrol and activate it on the device before this add-on is of any use.
+
 ## Installing
 
 In Home Assistant, go to **Settings > Add-ons > Add-on Store**, open the
