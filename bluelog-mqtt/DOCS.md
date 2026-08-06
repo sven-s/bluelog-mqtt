@@ -10,6 +10,10 @@ their own device cards.
    **SCADA Schnittstelle verwenden** is on. Note the Modbus IP address and the
    device port (usually 502; trackers sit on 503).
 2. Install this add-on, set `bluelog_host`, and start it.
+
+   Installing compiles the bridge from source on your machine, which takes
+   **two to three minutes** with no progress shown — the button just sits there.
+   That is normal. Watch the Supervisor log if you want to see it working.
 3. On first start the add-on scans the logger, works out what is connected, and
    writes `/config/bluelog-mqtt.yaml`. Watch the log to see what it found.
 

@@ -1,4 +1,6 @@
-ARG BUILD_FROM
+# The Supervisor overrides BUILD_FROM with the base image for the target
+# architecture. The default only matters for building this image by hand.
+ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.21
 
 # The bridge is pure Go with cgo disabled, so the builder runs on the target
 # architecture and the result drops straight into the Home Assistant base image.

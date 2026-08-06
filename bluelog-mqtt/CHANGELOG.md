@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.1
+
+- Drop `build.yaml`; the base image now comes from `ARG BUILD_FROM` in the
+  Dockerfile, which recent Supervisor versions warn about otherwise
+- Drop the deprecated `armv7`, `armhf` and `i386` architectures
+- Note in the docs that the first install spends a couple of minutes compiling
+
 ## 1.0.0
 
 First release as a Home Assistant add-on.
