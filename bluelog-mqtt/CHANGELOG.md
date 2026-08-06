@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.4
+
+- Publish the active power control block from the POWER CONTROL panel:
+  `power_setpoint` (Sollwert in W), `power_nominal`, `power_actual` (Istwert,
+  skipped while the plant has no feed-in measurement), `control_state`, and the
+  three panel percentages
+- The percentages all read 100 on an uncurtailed plant and cannot be told apart
+  from one sample. `setpoint_pct` is named for the Sollwert by inference from
+  the register layout; the other two keep their addresses as names until a
+  curtailment shows which is which
+
 ## 1.0.3
 
 Add-on options now take effect on restart instead of only being read when

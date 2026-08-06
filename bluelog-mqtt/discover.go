@@ -68,6 +68,28 @@ const plantSlaveID = 1
 var plantRegisters = []candidate{
 	{254, "power_ac", "W", "power", "measurement"},
 	{256, "power_reactive", "var", "reactive_power", "measurement"},
+
+	// Active power control, the P-Reglerbetrieb panel under POWER CONTROL.
+	// 6 and 52 both read the plant's nameplate power while the setpoint is 100%;
+	// they separate under curtailment, when the setpoint drops and the nameplate
+	// does not. 54 is the Istwert, NaN on plants with no feed-in measurement.
+	{6, "power_nominal", "W", "power", "measurement"},
+	{52, "power_setpoint", "W", "power", "measurement"},
+	{54, "power_actual", "W", "power", "measurement"},
+
+	// Three percentages belonging to the same panel, which shows Sollwert,
+	// Istwert and Stellwert. All three read 100 whenever the plant is
+	// uncurtailed, so they cannot be told apart from a single sample. 48 is
+	// named as the Sollwert because the Sollwert in watts sits at 52, directly
+	// after this group, but that is an inference from the layout and not
+	// confirmed. Watch which one moves during a curtailment before trusting the
+	// names, and swap them here if it turns out to be a different one.
+	{48, "setpoint_pct", "%", "", "measurement"},
+	{50, "pct_50", "%", "", "measurement"},
+	{56, "pct_56", "%", "", "measurement"},
+
+	// Betriebszustand / Quelle. Reads 2 while the panel shows Normalbetrieb.
+	{58, "control_state", "", "", ""},
 }
 
 var inverterRegisters = []candidate{
@@ -116,6 +138,13 @@ var basicRegisters = map[string]bool{
 	"power_factor":   true,
 	"power_reactive": true,
 	"irradiance":     true,
+	"power_nominal":  true,
+	"power_setpoint": true,
+	"power_actual":   true,
+	"setpoint_pct":   true,
+	"pct_50":         true,
+	"pct_56":         true,
+	"control_state":  true,
 }
 
 // Ranges swept for live registers that the catalogues above do not name. These

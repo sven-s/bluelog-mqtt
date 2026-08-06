@@ -67,6 +67,31 @@ device in the file is safe.
 Registers that are live but not in the catalogue are listed as a comment on the
 device so you can identify and add them by hand.
 
+## Power control
+
+The plant device also carries the active power control values shown under
+**POWER CONTROL > Übersicht** in the logger's web interface:
+
+| Register | Name | Panel field |
+| --- | --- | --- |
+| 52 | `power_setpoint` | Sollwert, in W |
+| 6 | `power_nominal` | plant nameplate power, in W |
+| 54 | `power_actual` | Istwert, in W. NaN on plants with no feed-in measurement, so it is skipped |
+| 48 | `setpoint_pct` | Sollwert, in % — see below |
+| 50, 56 | `pct_50`, `pct_56` | the other two percentages |
+| 58 | `control_state` | Betriebszustand; reads 2 during Normalbetrieb |
+
+The panel shows three percentages — Sollwert, Istwert and Stellwert — and an
+uncurtailed plant reports 100 for all of them, which makes them impossible to
+tell apart from one reading. `setpoint_pct` is named for the Sollwert because
+the Sollwert in watts sits at register 52, immediately after the group, but that
+is inferred from the layout rather than confirmed.
+
+To settle it, watch all three during a curtailment and see which follows the
+Sollwert in the web interface, then rename them in your config. `power_setpoint`
+at register 52 is unambiguous and needs no such care, so prefer it if you only
+want to know what the plant is allowed to deliver.
+
 ## Editing the config
 
 `/config/bluelog-mqtt.yaml` is reachable from the File Editor or Studio Code
