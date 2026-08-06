@@ -10,6 +10,11 @@ POLL_INTERVAL="$(bashio::config 'poll_interval')"
 TOPIC_PREFIX="$(bashio::config 'topic_prefix')"
 REGISTER_SET="$(bashio::config 'register_set')"
 
+HA_DISCOVERY="false"
+if bashio::config.true 'homeassistant_discovery'; then
+    HA_DISCOVERY="true"
+fi
+
 DEBUG_FLAG=""
 if bashio::config.true 'debug'; then
     DEBUG_FLAG="-debug"
@@ -66,13 +71,17 @@ else
 fi
 
 bashio::log.info "Starting the blue'Log MQTT bridge"
-# The MQTT settings are passed on every start so that changing them in the
-# add-on options takes effect, rather than being frozen into the config file
-# the first time discovery ran.
+# Every option is passed on each start so that changing one in the add-on UI
+# takes effect, rather than being frozen into the config file the first time
+# discovery ran. The config file stays authoritative for devices and registers.
 # shellcheck disable=SC2086
 exec bluelog-mqtt \
     -config "${CONFIG_FILE}" \
+    -host "${BLUELOG_HOST}" \
+    -port "${BLUELOG_PORT}" \
+    -poll-interval "${POLL_INTERVAL}" \
     -topic-prefix "${TOPIC_PREFIX}" \
+    -ha-discovery="${HA_DISCOVERY}" \
     -mqtt-broker "${MQTT_BROKER}" \
     -mqtt-username "${MQTT_USERNAME}" \
     -mqtt-password "${MQTT_PASSWORD}" \

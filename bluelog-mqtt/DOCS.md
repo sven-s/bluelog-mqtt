@@ -27,7 +27,7 @@ taken from the Supervisor. Set `mqtt_broker`, `mqtt_username` and
 | --- | --- | --- |
 | `bluelog_host` | — | Logger IP address. Required. |
 | `bluelog_port` | `502` | Modbus TCP port. Use 503 for trackers. |
-| `poll_interval` | `30s` | How often registers are read. |
+| `poll_interval` | `30s` | How often registers are read. `1s` is fine — a full sweep of ten devices takes well under a second. Values like `500ms`, `5s` and `2m` all work. |
 | `topic_prefix` | `bluelog` | Root of every published topic. |
 | `homeassistant_discovery` | `true` | Publish HA discovery configs. |
 | `discover_on_first_start` | `true` | Scan the logger when no config file exists. |
@@ -40,8 +40,9 @@ Leave `mqtt_broker` empty if you run the Mosquitto add-on — the Supervisor
 hands over the right host and credentials on its own. Setting it by hand is only
 for external brokers.
 
-MQTT settings are applied on every start, so changing them here takes effect
-after a restart even though the config file was written earlier.
+Every option here is applied on each start, so changing one takes effect after a
+restart even though the config file was written earlier. The config file stays
+authoritative for the device and register lists.
 
 `basic` publishes AC power, DC power, total energy, frequency, power factor and
 reactive power per inverter, plus irradiance. `all` adds per-phase voltage,

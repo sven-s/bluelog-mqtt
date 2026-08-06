@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.3
+
+Add-on options now take effect on restart instead of only being read when
+discovery first ran.
+
+- `poll_interval` is applied to the running bridge. It was previously only
+  written into the generated config, so changing it in the UI did nothing
+- `bluelog_host` and `bluelog_port` are applied the same way
+- `homeassistant_discovery` now does something; it was declared in the schema
+  but never read
+- Reject a poll interval of zero or less rather than spinning
+
+A one second poll interval is comfortably achievable: a full sweep of ten
+devices takes well under a second.
+
 ## 1.0.2
 
 Fixes the bridge silently publishing nothing when the broker could not be reached.

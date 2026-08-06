@@ -17,13 +17,14 @@ func main() {
 
 	discover := flag.Bool("discover", false, "scan the logger, write a config file and exit")
 	discoverOut := flag.String("out", "", "where -discover writes its config (default: -config path)")
-	host := flag.String("host", "", "logger address for -discover")
-	port := flag.Int("port", 502, "Modbus TCP port for -discover")
+	host := flag.String("host", "", "logger address, overriding the config file")
+	port := flag.Int("port", 502, "Modbus TCP port, overriding the config file")
+	haDiscovery := flag.Bool("ha-discovery", true, "publish Home Assistant discovery configs, overriding the config file")
 	firstSlave := flag.Int("first-slave", 100, "first SCADA address -discover probes")
 	lastSlave := flag.Int("last-slave", 247, "last SCADA address -discover probes")
 	maxMisses := flag.Int("max-misses", 8, "stop -discover after this many silent slave IDs in a row (0 scans the whole range)")
 	probeTimeout := flag.Duration("probe-timeout", 800*time.Millisecond, "per-register timeout during -discover")
-	pollInterval := flag.Duration("poll-interval", 30*time.Second, "poll interval written by -discover")
+	pollInterval := flag.Duration("poll-interval", 30*time.Second, "how often to read registers, overriding the config file")
 	mqttBroker := flag.String("mqtt-broker", "", "MQTT broker URL written by -discover")
 	mqttUser := flag.String("mqtt-username", "", "MQTT username written by -discover")
 	mqttPass := flag.String("mqtt-password", "", "MQTT password written by -discover")
@@ -86,11 +87,22 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to load config")
 	}
 
-	// MQTT settings given on the command line win over the file. The add-on
-	// passes them on every start, so changing the broker in the Home Assistant
-	// options takes effect without regenerating the config.
+	// Settings given on the command line win over the file. The add-on passes
+	// its options on every start, so changing one in the Home Assistant UI takes
+	// effect on restart rather than being stuck at whatever discovery wrote.
+	// Only flags the caller actually passed count, so unset flags keep the file's
+	// values instead of silently reimposing their defaults.
 	set := map[string]bool{}
 	flag.Visit(func(f *flag.Flag) { set[f.Name] = true })
+	if set["host"] {
+		cfg.BlueLog.Host = *host
+	}
+	if set["port"] {
+		cfg.BlueLog.Port = *port
+	}
+	if set["poll-interval"] {
+		cfg.BlueLog.PollInterval = *pollInterval
+	}
 	if set["mqtt-broker"] {
 		cfg.MQTT.Broker = normalizeBroker(*mqttBroker)
 	}
@@ -102,6 +114,13 @@ func main() {
 	}
 	if set["topic-prefix"] {
 		cfg.MQTT.TopicPrefix = *topicPrefix
+	}
+	if set["ha-discovery"] {
+		cfg.MQTT.HomeAssistantDiscovery = *haDiscovery
+	}
+
+	if cfg.BlueLog.PollInterval <= 0 {
+		log.Fatal().Dur("poll_interval", cfg.BlueLog.PollInterval).Msg("poll interval must be greater than zero")
 	}
 
 	log.Info().
