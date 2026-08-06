@@ -75,7 +75,7 @@ The plant device also carries the active power control values shown under
 | Register | Name | Panel field |
 | --- | --- | --- |
 | 52 | `power_setpoint` | Sollwert, in W |
-| 6 | `power_nominal` | plant nameplate power, in W |
+| 6 | `power_setpoint_mirror` | the same value again — see below |
 | 54 | `power_actual` | Istwert, in W. NaN on plants with no feed-in measurement, so it is skipped |
 | 48 | `setpoint_pct` | Sollwert, in % — see below |
 | 50, 56 | `pct_50`, `pct_56` | the other two percentages |
@@ -87,10 +87,15 @@ tell apart from one reading. `setpoint_pct` is named for the Sollwert because
 the Sollwert in watts sits at register 52, immediately after the group, but that
 is inferred from the layout rather than confirmed.
 
-To settle it, watch all three during a curtailment and see which follows the
-Sollwert in the web interface, then rename them in your config. `power_setpoint`
-at register 52 is unambiguous and needs no such care, so prefer it if you only
-want to know what the plant is allowed to deliver.
+This block mirrors values — 254 and 272 are the same power, 256 and 276 the same
+reactive power — and registers 6 and 52 are likewise identical. So treat 6 as a
+copy of the setpoint, **not** as a fixed nameplate figure: computing a percentage
+as `power_setpoint / power_setpoint_mirror` would most likely sit at 100 forever,
+including during a curtailment.
+
+On a plant under Einspeisemanagement the setpoint drops to a discrete stage
+during an event. That is the moment these registers separate, so record all three
+and see which one follows the web interface, then rename them in your config.
 
 ## Editing the config
 

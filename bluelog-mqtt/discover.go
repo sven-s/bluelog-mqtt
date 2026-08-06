@@ -70,20 +70,26 @@ var plantRegisters = []candidate{
 	{256, "power_reactive", "var", "reactive_power", "measurement"},
 
 	// Active power control, the P-Reglerbetrieb panel under POWER CONTROL.
-	// 6 and 52 both read the plant's nameplate power while the setpoint is 100%;
-	// they separate under curtailment, when the setpoint drops and the nameplate
-	// does not. 54 is the Istwert, NaN on plants with no feed-in measurement.
-	{6, "power_nominal", "W", "power", "measurement"},
+	// 52 is the Sollwert in watts and matches the panel exactly. 6 carries the
+	// same value; this block is known to mirror registers (254/272 and 256/276
+	// are the same power and reactive power), so 6 is most likely a mirror of
+	// the Sollwert rather than a separate nameplate figure. Do not treat it as a
+	// fixed reference to compute a percentage from — under curtailment it will
+	// probably move with the setpoint and the ratio will stay at 100%.
+	// 54 is the Istwert, NaN on plants with no feed-in measurement.
 	{52, "power_setpoint", "W", "power", "measurement"},
+	{6, "power_setpoint_mirror", "W", "power", "measurement"},
 	{54, "power_actual", "W", "power", "measurement"},
 
 	// Three percentages belonging to the same panel, which shows Sollwert,
 	// Istwert and Stellwert. All three read 100 whenever the plant is
-	// uncurtailed, so they cannot be told apart from a single sample. 48 is
-	// named as the Sollwert because the Sollwert in watts sits at 52, directly
-	// after this group, but that is an inference from the layout and not
-	// confirmed. Watch which one moves during a curtailment before trusting the
-	// names, and swap them here if it turns out to be a different one.
+	// uncurtailed, so they cannot be told apart from a single sample, and given
+	// the mirroring in this block two of them may well be the same value.
+	// 48 is named as the Sollwert because the Sollwert in watts sits at 52 just
+	// after the group; that is an inference from the layout, not an observation.
+	// On a plant under Einspeisemanagement the setpoint drops to a discrete
+	// stage (60%, 30%, 0%) during an event, which is when these separate and the
+	// naming can be settled. Publish all three so that event is not missed.
 	{48, "setpoint_pct", "%", "", "measurement"},
 	{50, "pct_50", "%", "", "measurement"},
 	{56, "pct_56", "%", "", "measurement"},
@@ -131,20 +137,20 @@ var sensorRegisters = []candidate{
 // without creating an entity per phase and per MPPT string. Everything else is
 // still discovered, it is simply left out of a -register-set=basic config.
 var basicRegisters = map[string]bool{
-	"power_ac":       true,
-	"power_dc":       true,
-	"energy_total":   true,
-	"frequency":      true,
-	"power_factor":   true,
-	"power_reactive": true,
-	"irradiance":     true,
-	"power_nominal":  true,
-	"power_setpoint": true,
-	"power_actual":   true,
-	"setpoint_pct":   true,
-	"pct_50":         true,
-	"pct_56":         true,
-	"control_state":  true,
+	"power_ac":              true,
+	"power_dc":              true,
+	"energy_total":          true,
+	"frequency":             true,
+	"power_factor":          true,
+	"power_reactive":        true,
+	"irradiance":            true,
+	"power_setpoint_mirror": true,
+	"power_setpoint":        true,
+	"power_actual":          true,
+	"setpoint_pct":          true,
+	"pct_50":                true,
+	"pct_56":                true,
+	"control_state":         true,
 }
 
 // Ranges swept for live registers that the catalogues above do not name. These

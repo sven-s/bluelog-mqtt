@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.5
+
+- Correct register 6. It was published as `power_nominal`, implying a fixed
+  nameplate figure to derive a percentage from. This block mirrors registers
+  (254/272, 256/276) and 6 matches 52 exactly, so it is most likely a copy of
+  the setpoint and will move with it under curtailment. Renamed to
+  `power_setpoint_mirror` so it is not mistaken for a stable reference
+
 ## 1.0.4
 
 - Publish the active power control block from the POWER CONTROL panel:
