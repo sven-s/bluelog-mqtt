@@ -1,0 +1,98 @@
+# bluelog-mqtt configuration
+#
+# You normally do not write this file by hand. Let the bridge scan the logger
+# and generate it, then edit what you want:
+#
+#   ./bluelog-mqtt -discover -host <bluelog-ip> -mqtt-broker tcp://<broker>:1883
+#
+# Discovery finds every connected device, names its registers, and skips
+# channels the logger has no value for. This file is a reference for the
+# structure and for the options discovery does not set.
+
+bluelog:
+  host: "<bluelog-ip>"        # blue'Log IP address
+  port: 502                   # Modbus TCP port (503 for trackers)
+  poll_interval: 30s          # How often to read registers
+  word_order: low_first       # 32-bit word order: low_first (blue'Log) or high_first
+
+mqtt:
+  broker: "tcp://<broker-ip>:1883"
+  username: ""
+  password: ""
+  client_id: "bluelog-mqtt"
+  topic_prefix: "bluelog"
+  homeassistant_discovery: true  # Publish HA MQTT discovery configs
+
+# Devices and registers to read.
+#
+# SCADA slave IDs:
+#   1        Plant aggregates, in a low address space of their own. This unit ID
+#            does not appear in the logger's device list but answers all the same.
+#   97       The logger itself
+#   98/99    Digital outputs / inputs
+#   100-247  Connected devices (inverters, meters, sensors)
+#
+# Register blocks per device:
+#   40000-40117  identification (type code, vendor, model, serial, bus)
+#   41000-41122  inverter measurements
+#   42036        irradiance, on sensor devices
+#
+# All registers use Function Code 03 (Read Holding Registers).
+# Supported types: float32, uint16, int16, uint32, int32
+#
+# Devices exposing the same channels can share a register set through a YAML
+# anchor. Unknown top-level keys are ignored by the loader, so this is inert.
+x-inverter: &inverter
+  - address: 41000
+    name: "power_ac"
+    type: float32
+    unit: "W"
+    device_class: "power"
+    state_class: "measurement"
+  - address: 41080
+    name: "power_dc"
+    type: float32
+    unit: "W"
+    device_class: "power"
+    state_class: "measurement"
+  - address: 41066
+    name: "energy_total"
+    type: float32
+    unit: "Wh"           # Wh, not kWh
+    device_class: "energy"
+    state_class: "total_increasing"
+  - address: 41012
+    name: "frequency"
+    type: float32
+    unit: "Hz"
+    device_class: "frequency"
+    state_class: "measurement"
+
+devices:
+  - name: "plant"
+    slave_id: 1
+    registers:
+      - address: 254
+        name: "power_ac"
+        type: float32
+        unit: "W"
+        device_class: "power"
+        state_class: "measurement"
+
+  - name: "inverter1"
+    slave_id: 100
+    registers: *inverter
+
+  - name: "inverter2"
+    slave_id: 101
+    registers: *inverter
+
+  - name: "sensor"
+    slave_id: 108
+    registers:
+      - address: 42036
+        name: "irradiance"
+        type: float32
+        unit: "W/m²"
+        device_class: "irradiance"
+        state_class: "measurement"

@@ -1,0 +1,39 @@
+name: "blue'Log MQTT Bridge"
+version: "1.0.0"
+slug: bluelog_mqtt
+description: "Reads a meteocontrol blue'Log solar data logger over Modbus TCP and publishes it to MQTT with Home Assistant discovery"
+url: "https://github.com/sven-s/bluelog-mqtt"
+arch:
+  - aarch64
+  - amd64
+  - armv7
+  - armhf
+  - i386
+init: false
+startup: services
+boot: auto
+map:
+  - addon_config:rw
+services:
+  - mqtt:want
+options:
+  bluelog_host: ""
+  bluelog_port: 502
+  poll_interval: 30s
+  topic_prefix: bluelog
+  homeassistant_discovery: true
+  discover_on_first_start: true
+  register_set: basic
+  debug: false
+schema:
+  bluelog_host: str
+  bluelog_port: port
+  poll_interval: str
+  topic_prefix: str
+  homeassistant_discovery: bool
+  discover_on_first_start: bool
+  register_set: list(basic|all)
+  debug: bool
+  mqtt_broker: str?
+  mqtt_username: str?
+  mqtt_password: password?
