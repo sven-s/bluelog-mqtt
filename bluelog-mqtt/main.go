@@ -86,11 +86,30 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to load config")
 	}
 
+	// MQTT settings given on the command line win over the file. The add-on
+	// passes them on every start, so changing the broker in the Home Assistant
+	// options takes effect without regenerating the config.
+	set := map[string]bool{}
+	flag.Visit(func(f *flag.Flag) { set[f.Name] = true })
+	if set["mqtt-broker"] {
+		cfg.MQTT.Broker = normalizeBroker(*mqttBroker)
+	}
+	if set["mqtt-username"] {
+		cfg.MQTT.Username = *mqttUser
+	}
+	if set["mqtt-password"] {
+		cfg.MQTT.Password = *mqttPass
+	}
+	if set["topic-prefix"] {
+		cfg.MQTT.TopicPrefix = *topicPrefix
+	}
+
 	log.Info().
 		Str("host", cfg.BlueLog.Host).
 		Int("port", cfg.BlueLog.Port).
 		Dur("poll_interval", cfg.BlueLog.PollInterval).
 		Int("devices", len(cfg.Devices)).
+		Str("broker", cfg.MQTT.Broker).
 		Msg("config loaded")
 
 	mqttPub, err := NewMQTTPublisher(cfg.MQTT)

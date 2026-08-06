@@ -66,5 +66,14 @@ else
 fi
 
 bashio::log.info "Starting the blue'Log MQTT bridge"
+# The MQTT settings are passed on every start so that changing them in the
+# add-on options takes effect, rather than being frozen into the config file
+# the first time discovery ran.
 # shellcheck disable=SC2086
-exec bluelog-mqtt -config "${CONFIG_FILE}" ${DEBUG_FLAG}
+exec bluelog-mqtt \
+    -config "${CONFIG_FILE}" \
+    -topic-prefix "${TOPIC_PREFIX}" \
+    -mqtt-broker "${MQTT_BROKER}" \
+    -mqtt-username "${MQTT_USERNAME}" \
+    -mqtt-password "${MQTT_PASSWORD}" \
+    ${DEBUG_FLAG}

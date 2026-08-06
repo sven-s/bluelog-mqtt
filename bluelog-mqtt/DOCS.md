@@ -33,8 +33,15 @@ taken from the Supervisor. Set `mqtt_broker`, `mqtt_username` and
 | `discover_on_first_start` | `true` | Scan the logger when no config file exists. |
 | `register_set` | `basic` | `basic` for headline values, `all` for every channel. |
 | `debug` | `false` | Verbose logging, including skipped registers. |
-| `mqtt_broker` | — | Override the Supervisor broker, e.g. `tcp://10.0.0.5:1883`. |
+| `mqtt_broker` | — | Override the Supervisor broker. `mqtt.lan`, `10.0.0.5:1883` and `tcp://10.0.0.5:1883` all work. |
 | `mqtt_username` / `mqtt_password` | — | Credentials for that broker. |
+
+Leave `mqtt_broker` empty if you run the Mosquitto add-on — the Supervisor
+hands over the right host and credentials on its own. Setting it by hand is only
+for external brokers.
+
+MQTT settings are applied on every start, so changing them here takes effect
+after a restart even though the config file was written earlier.
 
 `basic` publishes AC power, DC power, total energy, frequency, power factor and
 reactive power per inverter, plus irradiance. `all` adds per-phase voltage,

@@ -2,7 +2,10 @@ package main
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -80,11 +83,40 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("parsing config: %w", err)
 	}
 
+	cfg.MQTT.Broker = normalizeBroker(cfg.MQTT.Broker)
+
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
 
 	return cfg, nil
+}
+
+// normalizeBroker accepts the shorthand people actually type — "mqtt.lan",
+// "10.0.0.5:1883" — and turns it into the URL the MQTT client requires. Without
+// a scheme the client cannot parse a host at all and retries a connection to
+// nowhere forever, so this is worth being lenient about.
+func normalizeBroker(broker string) string {
+	broker = strings.TrimSpace(broker)
+	if broker == "" {
+		return ""
+	}
+	if !strings.Contains(broker, "://") {
+		broker = "tcp://" + broker
+	}
+	u, err := url.Parse(broker)
+	if err != nil || u.Host == "" {
+		return broker
+	}
+	if u.Port() == "" {
+		port := "1883"
+		switch u.Scheme {
+		case "ssl", "tls", "mqtts", "wss":
+			port = "8883"
+		}
+		u.Host = net.JoinHostPort(u.Hostname(), port)
+	}
+	return u.String()
 }
 
 func (c *Config) validate() error {

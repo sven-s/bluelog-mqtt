@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.2
+
+Fixes the bridge silently publishing nothing when the broker could not be reached.
+
+- Accept a bare host in `mqtt_broker`. `mqtt.lan` is now normalised to
+  `tcp://mqtt.lan:1883`; previously it could not be parsed at all, and the
+  client retried a connection to nowhere forever with nothing in the log
+- Bound the first connection attempt and log when the broker does not answer,
+  instead of blocking silently. Connects and drops are now logged as they happen
+- Apply MQTT settings on every start, so changing the broker in the add-on
+  options takes effect. They used to be frozen into the config file the first
+  time discovery ran, and later changes were ignored
+- Log the broker in the startup line
+
 ## 1.0.1
 
 - Drop `build.yaml`; the base image now comes from `ARG BUILD_FROM` in the

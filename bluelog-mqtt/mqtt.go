@@ -11,6 +11,10 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// connectTimeout bounds how long the first connection attempt is waited on
+// before the bridge carries on and lets the retry loop keep trying.
+const connectTimeout = 15 * time.Second
+
 type MQTTPublisher struct {
 	client      mqtt.Client
 	prefix      string
@@ -24,7 +28,13 @@ func NewMQTTPublisher(cfg MQTTConfig) (*MQTTPublisher, error) {
 		SetAutoReconnect(true).
 		SetConnectRetry(true).
 		SetConnectRetryInterval(5 * time.Second).
-		SetWill(cfg.TopicPrefix+"/status", `{"online":false}`, 1, true)
+		SetWill(cfg.TopicPrefix+"/status", `{"online":false}`, 1, true).
+		SetOnConnectHandler(func(mqtt.Client) {
+			log.Info().Str("broker", cfg.Broker).Msg("connected to MQTT broker")
+		}).
+		SetConnectionLostHandler(func(_ mqtt.Client, err error) {
+			log.Warn().Err(err).Str("broker", cfg.Broker).Msg("lost the MQTT connection, retrying")
+		})
 
 	if cfg.Username != "" {
 		opts.SetUsername(cfg.Username)
@@ -32,11 +42,20 @@ func NewMQTTPublisher(cfg MQTTConfig) (*MQTTPublisher, error) {
 	}
 
 	client := mqtt.NewClient(opts)
-	if token := client.Connect(); token.Wait() && token.Error() != nil {
-		return nil, fmt.Errorf("connecting to MQTT broker: %w", token.Error())
-	}
+	token := client.Connect()
 
-	log.Info().Str("broker", cfg.Broker).Msg("connected to MQTT broker")
+	// Connect retries in the background forever, so waiting on the token without
+	// a deadline hangs silently when the broker is wrong or unreachable — which
+	// looks exactly like the bridge doing nothing. Bound the first attempt, say
+	// so, and let the retry loop carry on behind us.
+	if !token.WaitTimeout(connectTimeout) {
+		log.Warn().
+			Str("broker", cfg.Broker).
+			Dur("waited", connectTimeout).
+			Msg("MQTT broker did not answer yet, still retrying in the background")
+	} else if err := token.Error(); err != nil {
+		return nil, fmt.Errorf("connecting to MQTT broker %s: %w", cfg.Broker, err)
+	}
 
 	return &MQTTPublisher{
 		client:      client,
