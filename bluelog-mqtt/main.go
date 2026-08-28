@@ -164,12 +164,21 @@ func main() {
 }
 
 func poll(mb *ModbusClient, pub *MQTTPublisher, devices []DeviceConfig) {
+	published := false
 	for _, dev := range devices {
 		readings := mb.ReadDevice(dev)
 		if len(readings) > 0 {
 			pub.PublishReadings(dev.Name, readings)
+			published = true
 			log.Debug().Str("device", dev.Name).Int("readings", len(readings)).Msg("polled")
 		}
 	}
-	pub.PublishStatus(true)
+	// Reporting "online" after a poll that read nothing leaves Home Assistant
+	// showing the last values as current. A cycle that yields nothing at all
+	// means the logger is unreachable, so say so and let the entities go
+	// unavailable.
+	if !published {
+		log.Warn().Int("devices", len(devices)).Msg("no device answered this poll")
+	}
+	pub.PublishStatus(published)
 }

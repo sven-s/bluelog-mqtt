@@ -27,7 +27,7 @@ func NewMQTTPublisher(cfg MQTTConfig) (*MQTTPublisher, error) {
 		SetClientID(cfg.ClientID).
 		SetAutoReconnect(true).
 		SetConnectRetry(true).
-		SetConnectRetryInterval(5 * time.Second).
+		SetConnectRetryInterval(5*time.Second).
 		SetWill(cfg.TopicPrefix+"/status", `{"online":false}`, 1, true).
 		SetOnConnectHandler(func(mqtt.Client) {
 			log.Info().Str("broker", cfg.Broker).Msg("connected to MQTT broker")
@@ -128,14 +128,18 @@ func (p *MQTTPublisher) PublishHADiscovery(devices []DeviceConfig) {
 }
 
 type haDiscoveryPayload struct {
-	Name              string    `json:"name"`
-	StateTopic        string    `json:"state_topic"`
-	UniqueID          string    `json:"unique_id"`
-	ValueTemplate     string    `json:"value_template"`
-	UnitOfMeasurement string    `json:"unit_of_measurement,omitempty"`
-	DeviceClass       string    `json:"device_class,omitempty"`
-	StateClass        string    `json:"state_class,omitempty"`
-	Device            haDevice  `json:"device"`
+	Name              string   `json:"name"`
+	StateTopic        string   `json:"state_topic"`
+	UniqueID          string   `json:"unique_id"`
+	ValueTemplate     string   `json:"value_template"`
+	UnitOfMeasurement string   `json:"unit_of_measurement,omitempty"`
+	DeviceClass       string   `json:"device_class,omitempty"`
+	StateClass        string   `json:"state_class,omitempty"`
+	AvailabilityTopic string   `json:"availability_topic"`
+	AvailabilityTmpl  string   `json:"availability_template"`
+	PayloadAvailable  string   `json:"payload_available"`
+	PayloadNotAvail   string   `json:"payload_not_available"`
+	Device            haDevice `json:"device"`
 }
 
 type haDevice struct {
@@ -160,6 +164,12 @@ func (p *MQTTPublisher) publishHASensorConfig(dev DeviceConfig, reg RegisterConf
 		UnitOfMeasurement: reg.Unit,
 		DeviceClass:       reg.DeviceClass,
 		StateClass:        reg.StateClass,
+		// Without this the status topic is decorative: entities would keep
+		// showing their last value as current while the logger is unreachable.
+		AvailabilityTopic: p.prefix + "/status",
+		AvailabilityTmpl:  "{{ 'online' if value_json.online else 'offline' }}",
+		PayloadAvailable:  "online",
+		PayloadNotAvail:   "offline",
 		Device: haDevice{
 			Identifiers:  []string{"bluelog_" + dev.Name},
 			Name:         humanize(dev.Name),

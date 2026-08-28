@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.6
+
+- Reconnect when the logger drops the Modbus connection. The client library
+  only clears a socket on its 60s idle timer, which a poll interval below that
+  never reaches, so a single closed connection wedged every later read with
+  "broken pipe" until the add-on was restarted by hand. A read that fails for
+  any reason other than a Modbus exception now redials once and retries; if
+  that fails too the device is left for the next poll instead of dialling once
+  per register
+- Report the bridge offline after a poll that read nothing, rather than
+  publishing "online" with no data behind it
+- Give the discovery configs an `availability_topic`, so the status topic
+  actually makes entities unavailable instead of leaving stale values on show
+
 ## 1.0.5
 
 - Correct register 6. It was published as `power_nominal`, implying a fixed

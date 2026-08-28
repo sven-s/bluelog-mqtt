@@ -2,19 +2,32 @@ package main
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 	"net"
+	"time"
 
 	"github.com/goburrow/modbus"
 	"github.com/rs/zerolog/log"
 )
 
+// readTimeout bounds a single register read, and with it how long an
+// unreachable logger can hold up a poll cycle.
+const readTimeout = 5 * time.Second
+
 type ModbusClient struct {
 	host         string
 	port         int
 	lowWordFirst bool
-	clients      map[byte]modbus.Client // keyed by slave ID
+	conns        map[byte]*slaveConn // keyed by slave ID
+}
+
+// slaveConn pairs a client with its handler so the connection behind it can be
+// closed and redialled; the client alone offers no way to do that.
+type slaveConn struct {
+	handler *modbus.TCPClientHandler
+	client  modbus.Client
 }
 
 func NewModbusClient(cfg BlueLogConfig) *ModbusClient {
@@ -22,32 +35,58 @@ func NewModbusClient(cfg BlueLogConfig) *ModbusClient {
 		host:         cfg.Host,
 		port:         cfg.Port,
 		lowWordFirst: cfg.LowWordFirst(),
-		clients:      make(map[byte]modbus.Client),
+		conns:        make(map[byte]*slaveConn),
 	}
 }
 
-func (m *ModbusClient) clientFor(slaveID byte) modbus.Client {
-	if c, ok := m.clients[slaveID]; ok {
+func (m *ModbusClient) connFor(slaveID byte) *slaveConn {
+	if c, ok := m.conns[slaveID]; ok {
 		return c
 	}
 	handler := modbus.NewTCPClientHandler(net.JoinHostPort(m.host, fmt.Sprintf("%d", m.port)))
 	handler.SlaveId = slaveID
-	c := modbus.NewClient(handler)
-	m.clients[slaveID] = c
+	handler.Timeout = readTimeout
+	c := &slaveConn{handler: handler, client: modbus.NewClient(handler)}
+	m.conns[slaveID] = c
 	return c
+}
+
+// dropConn closes a slave's connection so the next read dials a fresh one.
+func (m *ModbusClient) dropConn(slaveID byte) {
+	if c, ok := m.conns[slaveID]; ok {
+		c.handler.Close()
+		delete(m.conns, slaveID)
+	}
 }
 
 // ReadRegister reads a single register value and decodes it according to the register type.
 func (m *ModbusClient) ReadRegister(slaveID byte, reg RegisterConfig) (float64, error) {
-	client := m.clientFor(slaveID)
-
 	wordCount := registerWordCount(reg.Type)
-	results, err := client.ReadHoldingRegisters(reg.Address, wordCount)
+
+	results, err := m.connFor(slaveID).client.ReadHoldingRegisters(reg.Address, wordCount)
+	// The library never clears a socket the logger has closed under it: its
+	// connect() only dials when the connection is nil, and only the idle timer
+	// nils it — which a poll interval below 60s never reaches. So one dropped
+	// connection would wedge every later read with "broken pipe" until the
+	// bridge is restarted. Redial once and try again instead.
+	if err != nil && !isModbusException(err) {
+		log.Debug().Err(err).Uint8("slave", slaveID).Msg("connection failed, redialling")
+		m.dropConn(slaveID)
+		results, err = m.connFor(slaveID).client.ReadHoldingRegisters(reg.Address, wordCount)
+	}
 	if err != nil {
 		return 0, fmt.Errorf("reading %s (addr %d, slave %d): %w", reg.Name, reg.Address, slaveID, err)
 	}
 
 	return decodeValue(results, reg.Type, m.lowWordFirst)
+}
+
+// isModbusException reports whether the logger answered with a Modbus
+// exception. Anything else — a timeout, a closed socket, a malformed frame —
+// means the connection itself is suspect and should be redialled.
+func isModbusException(err error) bool {
+	var exc *modbus.ModbusError
+	return errors.As(err, &exc)
 }
 
 // ReadDevice reads all registers for a device and returns name→value map.
@@ -57,6 +96,14 @@ func (m *ModbusClient) ReadDevice(dev DeviceConfig) map[string]RegisterReading {
 		val, err := m.ReadRegister(dev.SlaveID, reg)
 		if err != nil {
 			log.Warn().Err(err).Str("device", dev.Name).Str("register", reg.Name).Msg("read failed")
+			if !isModbusException(err) {
+				// The redial failed too, so it is the logger that is unreachable,
+				// not this one register. Trying the rest would only dial once per
+				// register and stall the whole poll; pick the device up again on
+				// the next cycle.
+				m.dropConn(dev.SlaveID)
+				break
+			}
 			continue
 		}
 		// The logger reports unavailable channels as NaN (0x7FC00000) or as an
