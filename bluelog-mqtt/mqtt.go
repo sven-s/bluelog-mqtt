@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -15,13 +17,46 @@ import (
 // before the bridge carries on and lets the retry loop keep trying.
 const connectTimeout = 15 * time.Second
 
+// publishTimeout bounds a single publish. paho's token.Wait() can block forever
+// when the connection drops mid-reconnect, which froze the whole poll loop.
+const publishTimeout = 10 * time.Second
+
+// defaultClientID is what discovery writes. It gets the hostname appended so
+// two bridges on one broker (say the add-on and a local dev run) do not keep
+// kicking each other off. An ID the user chose is used as is.
+const defaultClientID = "bluelog-mqtt"
+
 type MQTTPublisher struct {
+	cfg         MQTTConfig
 	client      mqtt.Client
 	prefix      string
 	haDiscovery bool
+	devices     []DeviceConfig // re-announced after Reconnect
+	// lastSuccess is the unix nano time of the last publish the broker took.
+	lastSuccess atomic.Int64
 }
 
 func NewMQTTPublisher(cfg MQTTConfig) (*MQTTPublisher, error) {
+	if cfg.ClientID == "" || cfg.ClientID == defaultClientID {
+		cfg.ClientID = defaultClientID
+		if host, err := os.Hostname(); err == nil && host != "" {
+			cfg.ClientID += "-" + host
+		}
+	}
+
+	p := &MQTTPublisher{
+		cfg:         cfg,
+		prefix:      cfg.TopicPrefix,
+		haDiscovery: cfg.HomeAssistantDiscovery,
+	}
+	if err := p.connect(); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+func (p *MQTTPublisher) connect() error {
+	cfg := p.cfg
 	opts := mqtt.NewClientOptions().
 		AddBroker(cfg.Broker).
 		SetClientID(cfg.ClientID).
@@ -30,7 +65,7 @@ func NewMQTTPublisher(cfg MQTTConfig) (*MQTTPublisher, error) {
 		SetConnectRetryInterval(5*time.Second).
 		SetWill(cfg.TopicPrefix+"/status", `{"online":false}`, 1, true).
 		SetOnConnectHandler(func(mqtt.Client) {
-			log.Info().Str("broker", cfg.Broker).Msg("connected to MQTT broker")
+			log.Info().Str("broker", cfg.Broker).Str("client_id", cfg.ClientID).Msg("connected to MQTT broker")
 		}).
 		SetConnectionLostHandler(func(_ mqtt.Client, err error) {
 			log.Warn().Err(err).Str("broker", cfg.Broker).Msg("lost the MQTT connection, retrying")
@@ -54,14 +89,43 @@ func NewMQTTPublisher(cfg MQTTConfig) (*MQTTPublisher, error) {
 			Dur("waited", connectTimeout).
 			Msg("MQTT broker did not answer yet, still retrying in the background")
 	} else if err := token.Error(); err != nil {
-		return nil, fmt.Errorf("connecting to MQTT broker %s: %w", cfg.Broker, err)
+		client.Disconnect(0)
+		return fmt.Errorf("connecting to MQTT broker %s: %w", cfg.Broker, err)
 	}
 
-	return &MQTTPublisher{
-		client:      client,
-		prefix:      cfg.TopicPrefix,
-		haDiscovery: cfg.HomeAssistantDiscovery,
-	}, nil
+	p.client = client
+	// A fresh client gets a full grace period before it can be judged stalled.
+	p.lastSuccess.Store(time.Now().UnixNano())
+	return nil
+}
+
+// publish sends one message and waits a bounded time for paho to hand it off.
+func (p *MQTTPublisher) publish(topic string, qos byte, retained bool, data []byte) error {
+	token := p.client.Publish(topic, qos, retained, data)
+	if !token.WaitTimeout(publishTimeout) {
+		return fmt.Errorf("timed out after %s", publishTimeout)
+	}
+	if err := token.Error(); err != nil {
+		return err
+	}
+	p.lastSuccess.Store(time.Now().UnixNano())
+	return nil
+}
+
+// Stalled reports whether nothing has reached the broker for longer than after.
+func (p *MQTTPublisher) Stalled(after time.Duration) bool {
+	return time.Since(time.Unix(0, p.lastSuccess.Load())) > after
+}
+
+// Reconnect throws the paho client away and builds a new one. paho's own
+// auto-reconnect can wedge for good, and only a restart used to clear it.
+func (p *MQTTPublisher) Reconnect() error {
+	p.client.Disconnect(250)
+	if err := p.connect(); err != nil {
+		return err
+	}
+	p.PublishHADiscovery(p.devices)
+	return nil
 }
 
 type registerPayload struct {
@@ -94,10 +158,8 @@ func (p *MQTTPublisher) PublishReadings(device string, readings map[string]Regis
 			log.Error().Err(err).Str("topic", topic).Msg("marshal failed")
 			continue
 		}
-		token := p.client.Publish(topic, 0, false, data)
-		token.Wait()
-		if token.Error() != nil {
-			log.Error().Err(token.Error()).Str("topic", topic).Msg("publish failed")
+		if err := p.publish(topic, 0, false, data); err != nil {
+			log.Error().Err(err).Str("topic", topic).Msg("publish failed")
 		}
 	}
 }
@@ -110,11 +172,14 @@ func (p *MQTTPublisher) PublishStatus(online bool) {
 		LastPoll: time.Now().UTC().Format(time.RFC3339),
 	}
 	data, _ := json.Marshal(payload)
-	p.client.Publish(topic, 1, true, data)
+	if err := p.publish(topic, 1, true, data); err != nil {
+		log.Error().Err(err).Str("topic", topic).Msg("publish status failed")
+	}
 }
 
 // PublishHADiscovery publishes Home Assistant MQTT discovery configs for all devices.
 func (p *MQTTPublisher) PublishHADiscovery(devices []DeviceConfig) {
+	p.devices = devices
 	if !p.haDiscovery {
 		return
 	}
@@ -184,10 +249,8 @@ func (p *MQTTPublisher) publishHASensorConfig(dev DeviceConfig, reg RegisterConf
 		return
 	}
 
-	token := p.client.Publish(configTopic, 1, true, data)
-	token.Wait()
-	if token.Error() != nil {
-		log.Error().Err(token.Error()).Str("topic", configTopic).Msg("publish HA config failed")
+	if err := p.publish(configTopic, 1, true, data); err != nil {
+		log.Error().Err(err).Str("topic", configTopic).Msg("publish HA config failed")
 	}
 }
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.7
+
+- Recover from a wedged MQTT connection without a manual restart. When the
+  broker dropped the connection right after a reconnect, paho stopped
+  reconnecting and the next publish waited forever, freezing the poll loop with
+  no further log output. Every publish now gives up after 10s, and if nothing
+  has reached the broker for three poll intervals (at least 2 minutes) the
+  client is rebuilt and the discovery configs are sent again
+- Append the hostname to the default client ID `bluelog-mqtt`. Two bridges
+  sharing one ID on the same broker kick each other off in a loop. A
+  `client_id` set to anything else in the config is used unchanged
+
 ## 1.0.6
 
 - Reconnect when the logger drops the Modbus connection. The client library

@@ -148,6 +148,11 @@ func main() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
+	// The status topic is published every poll, even when the logger is down,
+	// so a broker that has taken nothing for several polls means the MQTT side
+	// is wedged rather than idle.
+	stallAfter := max(3*cfg.BlueLog.PollInterval, 2*time.Minute)
+
 	// Initial poll
 	poll(mb, mqttPub, cfg.Devices)
 
@@ -155,6 +160,12 @@ func main() {
 	for {
 		select {
 		case <-ticker.C:
+			if mqttPub.Stalled(stallAfter) {
+				log.Warn().Dur("stalled_for", stallAfter).Msg("nothing reached the MQTT broker, rebuilding the client")
+				if err := mqttPub.Reconnect(); err != nil {
+					log.Error().Err(err).Msg("rebuilding the MQTT client failed, trying again next poll")
+				}
+			}
 			poll(mb, mqttPub, cfg.Devices)
 		case sig := <-sigCh:
 			log.Info().Str("signal", sig.String()).Msg("shutting down")
